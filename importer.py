@@ -2,6 +2,7 @@ from sqlalchemy import create_engine, text
 from config import CONFIG
 import geopandas as gpd
 import logging
+import pandas as pd
 
 def get_engine():
     pg = CONFIG["postgis"]
@@ -25,12 +26,14 @@ def import_to_staging(gdf, table_name):
     gdf = gdf.set_geometry("geometry")
 
     engine = get_engine()
+    with engine.begin() as conn:
+        conn.execute(text(f'TRUNCATE TABLE qgis."{table_name}"'))
 
     gdf.to_postgis(
         table_name,
         con=engine,
         schema="qgis",
-        if_exists="replace",
+        if_exists="append",
         index=False,
     )
 
@@ -78,6 +81,7 @@ def merge_to_production(staging_table, target_table):
           visual_symptoms = src.visual_symptoms,
           priority_level = src.priority_level,
           remarks = src.remarks,
+          survey_date = src.survey_date,
           geom = ST_Transform(
                    ST_MakeValid(src.geometry),
                    :srid
@@ -90,16 +94,17 @@ def merge_to_production(staging_table, target_table):
         logging.info("Updated rows: %s", result_update.rowcount)
 
         insert_sql = text(f"""
-        INSERT INTO qgis."{target_table}" (id, "Condition", geom, damage_level, priority_leve, remarks, geom)
+        INSERT INTO qgis."{target_table}" (id, "Condition", damage_level, visual_symptoms, priority_level, remarks, survey_date, geom)
         SELECT
-          id,
-          "Condition",
-          damage_level,
-          visual_symptoms,
-          priority_level,
-          remarks,
+          s.id,
+          s."Condition",
+          s.damage_level,
+          s.visual_symptoms,
+          s.priority_level,
+          s.remarks,
+          CAST(s.survey_date as date),
           ST_Transform(
-            ST_MakeValid(geometry),
+            ST_MakeValid(s.geometry),
             :srid
           )
         FROM qgis."{staging_table}" s

@@ -2,8 +2,14 @@ import geopandas as gpd
 from config import CONFIG
 
 ALLOWED_COLUMNS = {
+    "id",
     "Condition",
-    "geom",
+    "geometry",
+    "damage_level",
+    "visual_symptoms",
+    "priority_level",
+    "remarks",
+    "survey_date",
 }
 
 REQUIRED_CRS = "EPSG:32647"
@@ -26,9 +32,10 @@ def validate_layer(gpkg_path: str, layer_name: str) -> gpd.GeoDataFrame:
     if gdf.crs.to_string() != REQUIRED_CRS:
         gdf = gdf.to_crs(REQUIRED_CRS)
 
-    keep_cols = ["id", "Condition", "geometry"]
-
+    keep_cols = [c for c in gdf.columns if c in ALLOWED_COLUMNS]
     gdf = gdf[keep_cols]
+
+    gdf = gpd.GeoDataFrame(gdf, geometry="geometry", crs=REQUIRED_CRS)
 
     if gdf.empty:
         raise RuntimeError("No valid features after validation")
